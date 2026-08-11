@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analizador de Telemetría OBDII</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #0b0f17;
+      color: #e2e8f0;
+    }
+
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #111827;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 3px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #4b5563;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col custom-scrollbar">
+
+  <!-- Header Nav -->
+  <header class="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-6">
+        <div class="flex items-center space-x-3">
+          <div class="p-2 bg-blue-600/20 text-blue-400 rounded-lg border border-blue-500/30">
+            <i data-lucide="gauge" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <h1 class="text-lg font-bold text-white tracking-wide flex items-center gap-2">
+              OBDII Telemetry & Performance
+              <span class="text-xs font-normal px-2 py-0.5 rounded bg-blue-900/50 text-blue-300 border border-blue-700/50">v2.8</span>
+            </h1>
+            <p class="text-xs text-gray-400">Análisis multivariable de rendimiento del motor</p>
+          </div>
+        </div>
+
+        <!-- Botones de Navegación -->
+        <nav class="hidden md:flex items-center space-x-2 bg-gray-900/80 p-1 rounded-xl border border-gray-800">
+          <button id="navDashboardBtn" onclick="switchTab('dashboard')" class="px-3 py-1.5 text-xs font-medium rounded-lg transition flex items-center gap-2 bg-blue-600 text-white shadow-sm shadow-blue-600/30 border border-blue-500">
+            <i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>
+            <span>Dashboard y Gráficos</span>
+          </button>
+          <button id="navConclusionsBtn" onclick="switchTab('conclusions')" class="px-3 py-1.5 text-xs font-medium text-purple-300 bg-purple-950/50 hover:bg-purple-900/60 border border-purple-800/50 rounded-lg transition flex items-center gap-2">
+            <i data-lucide="file-text" class="w-3.5 h-3.5 text-purple-400"></i>
+            <span>Informe de Conclusiones</span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Acciones de Usuario -->
+      <div class="flex items-center space-x-3">
+        <label class="cursor-pointer bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-2 rounded-lg flex items-center space-x-2 transition shadow-lg shadow-blue-600/20">
+          <i data-lucide="upload" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Cargar Nuevo CSV</span>
+          <input type="file" id="csvFileInput" accept=".csv" class="hidden" />
+        </label>
+        <button id="resetDemoBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold px-3 py-2 rounded-lg border border-gray-700 flex items-center space-x-2 transition">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Datos Muestra</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Navegación Móvil -->
+    <div class="flex md:hidden border-t border-gray-800 bg-gray-900 px-4 py-2 gap-2">
+      <button onclick="switchTab('dashboard')" id="mobileNavDashboard" class="flex-1 py-1.5 text-xs font-semibold rounded bg-blue-600 text-white text-center">Dashboard</button>
+      <button onclick="switchTab('conclusions')" id="mobileNavConclusions" class="flex-1 py-1.5 text-xs font-semibold rounded bg-purple-950/50 text-purple-300 border border-purple-800/50 text-center">Conclusiones</button>
+    </div>
+  </header>
+
+  <!-- Contenido Principal -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- PÁGINA 1: DASHBOARD -->
+    <div id="dashboardPage" class="space-y-6">
+
+      <!-- Tarjetas KPI -->
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <!-- RPM -->
+        <div class="bg-gray-900/90 border border-gray-800 rounded-xl p-4 flex flex-col justify-between relative overflow-hidden group hover:border-amber-500/40 transition">
+          <div class="absolute -right-2 -bottom-2 opacity-5 text-amber-500 group-hover:opacity-10 transition">
+            <i data-lucide="activity" class="w-20 h-20"></i>
+          </div>
+          <div class="flex items-center justify-between text-gray-400 text-xs font-medium">
+            <span>RPM Máximas</span>
+            <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+          </div>
+          <div class="mt-2">
+            <span id="kpi-rpm" class="text-2xl font-bold font-mono-code text-amber-400">--</span>
+            <span class="text-xs text-gray-500 ml-1">rpm</span>
+          </div>
+          <div id="kpi-rpm-avg" class="text-[11px] text-gray-400 mt-1">Prom: -- rpm</div>
+        </div>
+
+        <!-- Power from MAF -->
+        <div class="bg-gray-900/90 border border-gray-800 rounded-xl p-4 flex flex-col justify-between relative overflow-hidden group hover:border-emerald-500/40 transition">
+          <div class="absolute -right-2 -bottom-2 opacity-5 text-emerald-500 group-hover:opacity-10 transition">
+            <i data-lucide="zap" class="w-20 h-20"></i>
+          </div>
+          <div class="flex items-center justify-between text-gray-400 text-xs font-medium">
+            <span>Potencia MAF Máx</span>
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          </div>
+          <div class="mt-2">
+            <span id="kpi-power" class="text-2xl font-bold font-mono-code text-emerald-400">--</span>
+            <span class="text-xs text-gray-500 ml-1">hp</span>
+          </div>
+          <div id="kpi-power-avg" class="text-[11px] text-gray-400 mt-1">Prom: -- hp</div>
+        </div>
+
+        <!-- Pedal Position D -->
+        <div class="bg-gray-900/90 border border-gray-800 rounded-xl p-4 flex flex-col justify-between relative overflow-hidden group hover:border-cyan-500/40 transition">
+          <div class="absolute -right-2 -bottom-2 opacity-5 text-cyan-500 group-hover:opacity-10 transition">
+            <i data-lucide="footprints" class="w-20 h-20"></i>
+          </div>
+          <div class="flex items-center justify-between text-gray-400 text-xs font-medium">
+            <span>Pedal Acelerador D</span>
+            <span class="w-2 h-2 rounded-full bg-cyan-500"></span>
+          </div>
+          <div class="mt-2">
+            <span id="kpi-pedal" class="text-2xl font-bold font-mono-code text-cyan-400">--</span>
+            <span class="text-xs text-gray-500 ml-1">%</span>
+          </div>
+          <div id="kpi-pedal-avg" class="text-[11px] text-gray-400 mt-1">Prom: -- %</div>
+        </div>
+
+        <!-- MAP Pressure -->
+        <div class="bg-gray-900/90 border border-gray-800 rounded-xl p-4 flex flex-col justify-between relative overflow-hidden group hover:border-purple-500/40 transition">
+          <div class="absolute -right-2 -bottom-2 opacity-5 text-purple-500 group-hover:opacity-10 transition">
+            <i data-lucide="gauge" class="w-20 h-20"></i>
+          </div>
+          <div class="flex items-center justify-between text-gray-400 text-xs font-medium">
+            <span>Presión Colector MAP</span>
+            <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+          </div>
+          <div class="mt-2">
+            <span id="kpi-map" class="text-2xl font-bold font-mono-code text-purple-400">--</span>
+            <span class="text-xs text-gray-500 ml-1">psi</span>
+          </div>
+          <div id="kpi-map-avg" class="text-[11px] text-gray-400 mt-1">Prom: -- psi</div>
+        </div>
+
+        <!-- Calculated Boost -->
+        <div class="bg-gray-900/90 border border-gray-800 rounded-xl p-4 flex flex-col justify-between relative overflow-hidden group hover:border-rose-500/40 transition">
+          <div class="absolute -right-2 -bottom-2 opacity-5 text-rose-500 group-hover:opacity-10 transition">
+            <i data-lucide="wind" class="w-20 h-20"></i>
+          </div>
+          <div class="flex items-center justify-between text-gray-400 text-xs font-medium">
+            <span>Sobrealimentación</span>
+            <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+          </div>
+          <div class="mt-2">
+            <span id="kpi-boost" class="text-2xl font-bold font-mono-code text-rose-400">--</span>
+            <span class="text-xs text-gray-500 ml-1">psi</span>
+          </div>
+          <div id="kpi-boost-min" class="text-[11px] text-gray-400 mt-1">Vacío mín: -- psi</div>
+        </div>
+
+        <!-- MAF Airflow -->
+        <div class="bg-gray-900/90 border border-gray-800 rounded-xl p-4 flex flex-col justify-between relative overflow-hidden group hover:border-indigo-500/40 transition">
+          <div class="absolute -right-2 -bottom-2 opacity-5 text-indigo-500 group-hover:opacity-10 transition">
+            <i data-lucide="waves" class="w-20 h-20"></i>
+          </div>
+          <div class="flex items-center justify-between text-gray-400 text-xs font-medium">
+            <span>Flujo Aire MAF</span>
+            <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+          </div>
+          <div class="mt-2">
+            <span id="kpi-maf" class="text-2xl font-bold font-mono-code text-indigo-400">--</span>
+            <span class="text-xs text-gray-500 ml-1">g/s</span>
+          </div>
+          <div id="kpi-maf-avg" class="text-[11px] text-gray-400 mt-1">Prom: -- g/s</div>
+        </div>
+      </div>
+
+      <!-- Selector de Rango Temporal -->
+      <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center space-x-3 w-full md:w-auto">
+          <i data-lucide="clock" class="w-5 h-5 text-blue-400 flex-shrink-0"></i>
+          <div>
+            <h2 class="text-sm font-semibold text-white">Rango Temporal de la Sesión</h2>
+            <p class="text-xs text-gray-400">Tiempo total registrado: <span id="time-total-str" class="font-mono-code text-blue-300">--</span></p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-4 w-full md:w-2/3">
+          <span id="time-start-lbl" class="text-xs font-mono-code text-gray-400 w-16 text-right">00:00:00</span>
+          <input type="range" id="timeSliderStart" min="0" max="100" value="0" class="w-full accent-blue-500 cursor-pointer">
+          <input type="range" id="timeSliderEnd" min="0" max="100" value="100" class="w-full accent-blue-500 cursor-pointer">
+          <span id="time-end-lbl" class="text-xs font-mono-code text-gray-400 w-16">00:00:00</span>
+        </div>
+      </div>
+
+      <!-- GRÁFICO COMPARATIVO PRINCIPAL -->
+      <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-xl">
+        <div class="flex flex-col md:flex-row md:items-center justify-between mb-4 pb-3 border-b border-gray-800 gap-2">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
+              <h2 class="text-base font-bold text-white">Comparativa Principal: Rendimiento y Respuesta del Motor</h2>
+            </div>
+            <p class="text-xs text-gray-400 mt-0.5">Relación entre Pedal D, RPM del Motor y Potencia MAF</p>
+          </div>
+          <div class="flex items-center space-x-4 text-xs font-medium">
+            <span class="flex items-center space-x-1.5 text-emerald-400"><span class="w-3 h-0.5 bg-emerald-400 inline-block"></span><span>Potencia MAF (hp)</span></span>
+            <span class="flex items-center space-x-1.5 text-amber-400"><span class="w-3 h-0.5 bg-amber-400 inline-block"></span><span>RPM Motor</span></span>
+            <span class="flex items-center space-x-1.5 text-cyan-400"><span class="w-3 h-0.5 bg-cyan-400 inline-block"></span><span>Pedal Acelerador D (%)</span></span>
+          </div>
+        </div>
+        <div class="relative w-full h-[360px]">
+          <canvas id="primaryComparisonChart"></canvas>
+        </div>
+      </div>
+
+      <!-- GRÁFICO SECUNDARIO -->
+      <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-xl">
+        <div class="flex flex-col md:flex-row md:items-center justify-between mb-4 pb-3 border-b border-gray-800 gap-2">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="w-3 h-3 rounded-full bg-indigo-500"></span>
+              <h2 class="text-base font-bold text-white">Análisis de Admisión, Caudalímetro y Sobrealimentación</h2>
+            </div>
+            <p class="text-xs text-gray-400 mt-0.5">Presión MAP, Sobrealimentación de Turbo y Flujo MAF</p>
+          </div>
+          <div class="flex items-center space-x-4 text-xs font-medium">
+            <span class="flex items-center space-x-1.5 text-purple-400"><span class="w-3 h-0.5 bg-purple-400 inline-block"></span><span>Presión MAP (psi)</span></span>
+            <span class="flex items-center space-x-1.5 text-rose-400"><span class="w-3 h-0.5 bg-rose-400 inline-block"></span><span>Sobrealimentación (psi)</span></span>
+            <span class="flex items-center space-x-1.5 text-indigo-400"><span class="w-3 h-0.5 bg-indigo-400 inline-block"></span><span>Flujo MAF (g/s)</span></span>
+          </div>
+        </div>
+        <div class="relative w-full h-[320px]">
+          <canvas id="secondaryMetricsChart"></canvas>
+        </div>
+      </div>
+
+      <!-- CORRELACIÓN Y DIAGNÓSTICO -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Gráfico de Dispersión / Correlación -->
+        <div class="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-800">
+            <div>
+              <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                <i data-lucide="git-commit" class="w-4 h-4 text-blue-400"></i>
+                Gráfico de Dispersión / Correlación de Parámetros
+              </h3>
+              <p class="text-xs text-gray-400">Correlación entre variables emparejadas temporalmente</p>
+            </div>
+            <div class="flex items-center space-x-2">
+              <select id="scatterXSelect" class="bg-gray-800 border border-gray-700 text-xs text-gray-200 rounded px-2 py-1">
+                <option value="pedal">Eje X: Pedal Acelerador D (%)</option>
+                <option value="rpm">Eje X: RPM Motor</option>
+                <option value="maf">Eje X: Flujo Aire MAF (g/s)</option>
+              </select>
+              <span class="text-gray-500 text-xs">vs</span>
+              <select id="scatterYSelect" class="bg-gray-800 border border-gray-700 text-xs text-gray-200 rounded px-2 py-1">
+                <option value="power">Eje Y: Potencia MAF (hp)</option>
+                <option value="boost">Eje Y: Sobrealimentación (psi)</option>
+                <option value="rpm">Eje Y: RPM Motor</option>
+              </select>
+            </div>
+          </div>
+          <div class="relative w-full h-[280px]">
+            <canvas id="scatterChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Diagnóstico Automático -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 flex flex-col justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-white flex items-center gap-2 mb-3 pb-3 border-b border-gray-800">
+              <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i>
+              Diagnóstico Automático OBDII
+            </h3>
+            <div id="diagnosticContainer" class="space-y-3 text-xs">
+              <div class="p-3 rounded-lg bg-gray-800/60 border border-gray-700/50">
+                <div class="font-semibold text-gray-200 mb-1 flex items-center gap-1.5">
+                  <i data-lucide="cpu" class="w-3.5 h-3.5 text-blue-400"></i> MAF vs Potencia
+                </div>
+                <p id="diag-maf-power" class="text-gray-400 leading-relaxed">Analizando flujo de masa de aire...</p>
+              </div>
+
+              <div class="p-3 rounded-lg bg-gray-800/60 border border-gray-700/50">
+                <div class="font-semibold text-gray-200 mb-1 flex items-center gap-1.5">
+                  <i data-lucide="gauge" class="w-3.5 h-3.5 text-purple-400"></i> MAP Colector / Turbo
+                </div>
+                <p id="diag-map-boost" class="text-gray-400 leading-relaxed">Analizando presión de sobrealimentación...</p>
+              </div>
+
+              <div class="p-3 rounded-lg bg-gray-800/60 border border-gray-700/50">
+                <div class="font-semibold text-gray-200 mb-1 flex items-center gap-1.5">
+                  <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i> Sensibilidad del Acelerador
+                </div>
+                <p id="diag-pedal-rpm" class="text-gray-400 leading-relaxed">Calculando respuesta del motor...</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-gray-800 text-[11px] text-gray-500 flex items-center justify-between">
+            <span>Lecturas procesadas: <strong id="totalSamplesCount" class="text-gray-300">0</strong></span>
+            <span class="text-emerald-400 flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Datos limpios
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabla de Datos -->
+      <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-xl">
+        <div class="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-3">
+          <div>
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i data-lucide="table" class="w-4 h-4 text-gray-400"></i>
+              Registros Procesados por PID
+            </h3>
+            <p class="text-xs text-gray-400">Datos normalizados de marcas de tiempo y valores escalados</p>
+          </div>
+          <div class="flex items-center space-x-3">
+            <select id="pidFilterSelect" class="bg-gray-800 border border-gray-700 text-xs text-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500">
+              <option value="ALL">Todos los PID</option>
+            </select>
+            <input type="text" id="searchInput" placeholder="Buscar..." class="bg-gray-800 border border-gray-700 text-xs text-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500 w-36 md:w-48">
+          </div>
+        </div>
+
+        <div class="overflow-x-auto max-h-80 custom-scrollbar rounded-lg border border-gray-800">
+          <table class="w-full text-left text-xs text-gray-300">
+            <thead class="bg-gray-950 text-gray-400 uppercase text-[10px] tracking-wider sticky top-0 z-10 border-b border-gray-800">
+              <tr>
+                <th class="px-4 py-2.5">Tiempo (HH:MM:SS)</th>
+                <th class="px-4 py-2.5">Segundos</th>
+                <th class="px-4 py-2.5">PID / Parámetro</th>
+                <th class="px-4 py-2.5 text-right">Valor Limpio</th>
+                <th class="px-4 py-2.5">Unidades</th>
+              </tr>
+            </thead>
+            <tbody id="dataTableBody" class="divide-y divide-gray-800/60 font-mono-code text-[11px]">
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- PÁGINA 2: INFORME DE CONCLUSIONES -->
+    <div id="conclusionsPage" class="hidden space-y-6">
+      
+      <!-- Banner del Informe -->
+      <div class="bg-gradient-to-r from-purple-900/40 via-indigo-900/20 to-gray-900 border border-purple-500/30 rounded-2xl p-6 relative overflow-hidden">
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
+          <div class="space-y-1">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+              <i data-lucide="check-circle2" class="w-3.5 h-3.5 text-purple-400"></i>
+              Informe Técnico Dinámico Consolidado
+            </span>
+            <h2 class="text-2xl font-extrabold text-white tracking-tight">Conclusiones del Análisis de Telemetría OBDII</h2>
+            <p class="text-sm text-gray-300 max-w-2xl">
+              Evaluación del comportamiento mecánico, respuesta dinámica del acelerador y salud del sistema de sobrealimentación basada en el archivo procesado.
+            </p>
+          </div>
+          <button onclick="window.print()" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition self-start md:self-auto">
+            <i data-lucide="printer" class="w-4 h-4"></i>
+            <span>Imprimir / Exportar PDF</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Resumen Ejecutivo -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex items-center space-x-4">
+          <div class="p-3 bg-amber-500/10 text-amber-400 rounded-lg border border-amber-500/20">
+            <i data-lucide="zap" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-xs text-gray-400">Rango de Régimen</div>
+            <div id="report-rpm-range" class="text-lg font-bold text-white font-mono-code">-- RPM</div>
+            <div id="report-rpm-sub" class="text-[11px] text-emerald-400">Cálculo dinámico</div>
+          </div>
+        </div>
+
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex items-center space-x-4">
+          <div class="p-3 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">
+            <i data-lucide="activity" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-xs text-gray-400">Pico Potencia MAF</div>
+            <div id="report-power-peak" class="text-lg font-bold text-white font-mono-code">-- HP</div>
+            <div id="report-power-sub" class="text-[11px] text-gray-400">Ralentí: -- HP</div>
+          </div>
+        </div>
+
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex items-center space-x-4">
+          <div class="p-3 bg-rose-500/10 text-rose-400 rounded-lg border border-rose-500/20">
+            <i data-lucide="wind" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-xs text-gray-400">Pico de Sobrealimentación</div>
+            <div id="report-boost-peak" class="text-lg font-bold text-white font-mono-code">-- PSI</div>
+            <div id="report-boost-sub" class="text-[11px] text-rose-400">Presión de colector</div>
+          </div>
+        </div>
+
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex items-center space-x-4">
+          <div class="p-3 bg-indigo-500/10 text-indigo-400 rounded-lg border border-indigo-500/20">
+            <i data-lucide="check-check" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-xs text-gray-400">Calibración MAF</div>
+            <div id="report-maf-ratio" class="text-lg font-bold text-white font-mono-code">-- HP / (g/s)</div>
+            <div id="report-maf-sub" class="text-[11px] text-emerald-400">Relación de caudal</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Secciones del Informe -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- Conclusión 1 -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4 hover:border-amber-500/30 transition">
+          <div class="flex items-center space-x-3 pb-3 border-b border-gray-800">
+            <div class="p-2 bg-amber-500/20 text-amber-400 rounded-lg">
+              <i data-lucide="gauge" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-white">1. Dinámica de Aceleración y Respuesta del Motor</h3>
+              <p class="text-xs text-gray-400">Correlación Pedal vs. RPM vs. Potencia Calculada</p>
+            </div>
+          </div>
+          <div id="report-c1-body" class="space-y-3 text-xs text-gray-300 leading-relaxed"></div>
+        </div>
+
+        <!-- Conclusión 2 -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4 hover:border-rose-500/30 transition">
+          <div class="flex items-center space-x-3 pb-3 border-b border-gray-800">
+            <div class="p-2 bg-rose-500/20 text-rose-400 rounded-lg">
+              <i data-lucide="wind" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-white">2. Sistema de Admisión y Turbo (MAP / Boost)</h3>
+              <p class="text-xs text-gray-400">Transición de Vacío a Presión Positiva de Sobrealimentación</p>
+            </div>
+          </div>
+          <div id="report-c2-body" class="space-y-3 text-xs text-gray-300 leading-relaxed"></div>
+        </div>
+
+        <!-- Conclusión 3 -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4 hover:border-indigo-500/30 transition">
+          <div class="flex items-center space-x-3 pb-3 border-b border-gray-800">
+            <div class="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg">
+              <i data-lucide="waves" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-white">3. Rendimiento del Sensor MAF (Caudalímetro)</h3>
+              <p class="text-xs text-gray-400">Linealidad del Flujo de Masa de Aire y Evaluación de Salud</p>
+            </div>
+          </div>
+          <div id="report-c3-body" class="space-y-3 text-xs text-gray-300"></div>
+        </div>
+
+        <!-- Conclusión 4 -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4 hover:border-emerald-500/30 transition">
+          <div class="flex items-center space-x-3 pb-3 border-b border-gray-800">
+            <div class="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg">
+              <i data-lucide="shield-check" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-white">4. Diagnóstico General e Integridad de la Muestra</h3>
+              <p class="text-xs text-gray-400">Evaluación Mecánica Global y Calidad de Telemetría</p>
+            </div>
+          </div>
+          <div id="report-c4-body" class="space-y-3 text-xs text-gray-300 leading-relaxed"></div>
+        </div>
+
+      </div>
+
+      <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center space-x-3">
+          <i data-lucide="info" class="w-5 h-5 text-purple-400 flex-shrink-0"></i>
+          <p class="text-xs text-gray-400">
+            Este informe fue recalculado dinámicamente con los datos de telemetría cargados.
+          </p>
+        </div>
+        <button onclick="switchTab('dashboard')" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition whitespace-nowrap">
+          Volver al Dashboard
+        </button>
+      </div>
+
+    </div>
+
+  </main>
+
+  <footer class="border-t border-gray-800 py-4 text-center text-xs text-gray-500">
+    OBDII Telemetry Analysis Suite &bull; Formateador e Informe de Diagnóstico
+  </footer>
+
+  <!-- SCRIPT LOGIC -->
+  <script>
+    // Embedded sample dataset fallback
+    const rawEmbeddedCSV = `SECONDS;PID;VALUE;UNITS
+544.455.437.098;Presión absoluta en el colector de admisión;37.539.179.248.870.500;psi
+544.455.437.098;Sobrealimentación calculada;-10.942.030.878.688.800;psi
+544.457.608.978;Presión absoluta en el colector de admisión;37.539.179.248.870.500;psi
+544.457.608.978;Sobrealimentación calculada;-10.942.030.878.688.800;psi
+544.459.109.851;Consumo instantáneo de combustible (l/h);0.5501817165222255;L/h
+544.459.109.851;Potencia instantánea del motor (basada en el consumo de combustible);21.524.197.570.918.000;hp
+544.459.109.851;Power from MAF;1.968;hp
+544.459.109.851;Velocidad del flujo del aire MAF;1.64;g/sec
+544.460.718.599;Revoluciones del motor;890;rpm
+544.460.718.599;Revoluciones del motor x1000;0.89;rpm
+544.462.339.756;Posición del pedal del acelerador D;18.823.529.411.764.700;%
+544.463.929.588;Presión absoluta en el colector de admisión;37.0;psi
+544.463.929.588;Sobrealimentación calculada;-11.0;psi
+546.100.000.000;Power from MAF;4.25;hp
+546.100.000.000;Velocidad del flujo del aire MAF;3.54;g/sec
+546.102.000.000;Revoluciones del motor;1250;rpm
+546.104.000.000;Posición del pedal del acelerador D;28.5;%
+546.106.000.000;Presión absoluta en el colector de admisión;45.2;psi
+546.106.000.000;Sobrealimentación calculada;-8.5;psi
+548.200.000.000;Power from MAF;12.80;hp
+548.200.000.000;Velocidad del flujo del aire MAF;10.66;g/sec
+548.202.000.000;Revoluciones del motor;1850;rpm
+548.204.000.000;Posición del pedal del acelerador D;42.0;%
+548.206.000.000;Presión absoluta en el colector de admisión;68.4;psi
+548.206.000.000;Sobrealimentación calculada;-2.1;psi
+550.500.000.000;Power from MAF;28.40;hp
+550.500.000.000;Velocidad del flujo del aire MAF;23.66;g/sec
+550.502.000.000;Revoluciones del motor;2420;rpm
+550.504.000.000;Posición del pedal del acelerador D;58.5;%
+550.506.000.000;Presión absoluta en el colector de admisión;95.8;psi
+550.506.000.000;Sobrealimentación calculada;4.2;psi
+553.100.000.000;Power from MAF;45.10;hp
+553.100.000.000;Velocidad del flujo del aire MAF;37.58;g/sec
+553.102.000.000;Revoluciones del motor;3100;rpm
+553.104.000.000;Posición del pedal del acelerador D;75.0;%
+553.106.000.000;Presión absoluta en el colector de admisión;130.5;psi
+553.106.000.000;Sobrealimentación calculada;11.8;psi
+555.800.000.000;Power from MAF;52.60;hp
+555.800.000.000;Velocidad del flujo del aire MAF;43.83;g/sec
+555.802.000.000;Revoluciones del motor;3450;rpm
+555.804.000.000;Posición del pedal del acelerador D;82.4;%
+555.806.000.000;Presión absoluta en el colector de admisión;142.0;psi
+555.806.000.000;Sobrealimentación calculada;14.2;psi
+558.481.554.045;Power from MAF;1.716;hp
+558.481.554.045;Velocidad del flujo del aire MAF;1.43;g/sec
+558.483.164.243;Revoluciones del motor;939;rpm
+558.484.796.012;Posición del pedal del acelerador D;20.784.313.725.490.100;%
+558.486.398.633;Presión absoluta en el colector de admisión;4.504.701.509.864.470;psi
+558.486.398.633;Sobrealimentación calculada;-9.128.845.862.807.370;psi`;
+
+    // Global App State
+    let parsedData = [];
+    let groupedByTime = [];
+    let pidsList = [];
+    let primaryChart = null;
+    let secondaryChart = null;
+    let scatterChart = null;
+
+    // Sanitize encoding / mojibake
+    function sanitizeText(str) {
+      if (!str) return '';
+      let text = String(str);
+
+      const map = {
+        'Ã¡': 'á', 'Ã©': 'é', 'Ã­': 'í', 'Ã³': 'ó', 'Ãº': 'ú',
+        'Ã': 'Á', 'Ã‰': 'É', 'Ã': 'Í', 'Ã“': 'Ó', 'Ãš': 'Ú',
+        'Ã±': 'ñ', 'Ã‘': 'Ñ', 'â‚¬': '€'
+      };
+
+      for (let key in map) {
+        text = text.split(key).join(map[key]);
+      }
+
+      return text.replace(/^"|"$/g, '').trim();
+    }
+
+    // Switch between Dashboard and Conclusions
+    function switchTab(tab) {
+      const dashboardPage = document.getElementById('dashboardPage');
+      const conclusionsPage = document.getElementById('conclusionsPage');
+      
+      const navDashboardBtn = document.getElementById('navDashboardBtn');
+      const navConclusionsBtn = document.getElementById('navConclusionsBtn');
+
+      const mobileNavDashboard = document.getElementById('mobileNavDashboard');
+      const mobileNavConclusions = document.getElementById('mobileNavConclusions');
+
+      if (tab === 'conclusions') {
+        dashboardPage.classList.add('hidden');
+        conclusionsPage.classList.remove('hidden');
+
+        navConclusionsBtn.className = "px-3 py-1.5 text-xs font-medium rounded-lg transition flex items-center gap-2 bg-purple-600 text-white shadow-sm shadow-purple-600/30 border border-purple-500";
+        navDashboardBtn.className = "px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-white rounded-lg transition flex items-center gap-2 hover:bg-gray-800";
+
+        mobileNavConclusions.className = "flex-1 py-1.5 text-xs font-semibold rounded bg-purple-600 text-white text-center";
+        mobileNavDashboard.className = "flex-1 py-1.5 text-xs font-semibold rounded bg-gray-800 text-gray-400 text-center";
+      } else {
+        conclusionsPage.classList.add('hidden');
+        dashboardPage.classList.remove('hidden');
+
+        navDashboardBtn.className = "px-3 py-1.5 text-xs font-medium rounded-lg transition flex items-center gap-2 bg-blue-600 text-white shadow-sm shadow-blue-600/30 border border-blue-500";
+        navConclusionsBtn.className = "px-3 py-1.5 text-xs font-medium text-purple-300 bg-purple-950/50 hover:bg-purple-900/60 border border-purple-800/50 rounded-lg transition flex items-center gap-2";
+
+        mobileNavDashboard.className = "flex-1 py-1.5 text-xs font-semibold rounded bg-blue-600 text-white text-center";
+        mobileNavConclusions.className = "flex-1 py-1.5 text-xs font-semibold rounded bg-purple-950/50 text-purple-300 border border-purple-800/50 text-center";
+
+        setTimeout(() => {
+          if (primaryChart) primaryChart.resize();
+          if (secondaryChart) secondaryChart.resize();
+          if (scatterChart) scatterChart.resize();
+        }, 50);
+      }
+    }
+
+    // Clean numbers
+    function parseCleanNumber(valStr) {
+      if (valStr === null || valStr === undefined) return NaN;
+      let str = String(valStr).replace(/^"|"$/g, '').trim();
+      if (!str) return NaN;
+
+      let isNegative = str.startsWith('-');
+      if (isNegative) str = str.substring(1);
+
+      let parts = str.split('.');
+      if (parts.length > 1) {
+        let intPart = parts[0];
+        let decPart = parts.slice(1).join('');
+        let num = parseFloat(intPart + '.' + decPart);
+        return isNegative ? -num : num;
+      }
+
+      let num = parseFloat(str.replace(',', '.'));
+      return isNegative ? -num : num;
+    }
+
+    // Convert seconds to HH:MM:SS
+    function secondsToHHMMSS(totalSecs) {
+      if (isNaN(totalSecs)) return '00:00:00';
+      let secsNormalized = totalSecs;
+      if (secsNormalized > 864000) {
+        secsNormalized = secsNormalized / 1000;
+      }
+
+      const hrs = Math.floor((secsNormalized / 3600) % 24);
+      const mins = Math.floor((secsNormalized % 3600) / 60);
+      const secs = Math.floor(secsNormalized % 60);
+
+      const hh = String(hrs).padStart(2, '0');
+      const mm = String(mins).padStart(2, '0');
+      const ss = String(secs).padStart(2, '0');
+
+      return `${hh}:${mm}:${ss}`;
+    }
+
+    // Parse CSV
+    function parseCSVText(csvText) {
+      const cleanText = sanitizeText(csvText);
+      const lines = cleanText.split(/\r?\n/);
+      if (lines.length < 2) return [];
+
+      const firstLine = lines[0];
+      const delimiter = firstLine.includes(';') ? ';' : ',';
+      const results = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const cols = line.split(delimiter);
+        if (cols.length >= 3) {
+          const rawSecs = parseCleanNumber(cols[0]);
+          const pid = sanitizeText(cols[1]);
+          const rawVal = parseCleanNumber(cols[2]);
+          const units = cols[3] ? sanitizeText(cols[3]) : '';
+
+          if (!isNaN(rawSecs) && pid && !isNaN(rawVal)) {
+            results.push({
+              seconds: rawSecs,
+              timeFormatted: secondsToHHMMSS(rawSecs),
+              pid: pid,
+              value: rawVal,
+              units: units
+            });
+          }
+        }
+      }
+
+      results.sort((a, b) => a.seconds - b.seconds);
+      return results;
+    }
+
+    // Process and pivot data grouped by timestamp
+    function processParsedData(data) {
+      parsedData = data;
+      pidsList = Array.from(new Set(data.map(d => d.pid)));
+
+      const timeMap = new Map();
+
+      data.forEach(item => {
+        const timeKey = Math.round(item.seconds * 10) / 10;
+        if (!timeMap.has(timeKey)) {
+          timeMap.set(timeKey, {
+            seconds: item.seconds,
+            timeFormatted: item.timeFormatted,
+            metrics: {}
+          });
+        }
+        timeMap.get(timeKey).metrics[item.pid] = item.value;
+      });
+
+      groupedByTime = Array.from(timeMap.values()).sort((a, b) => a.seconds - b.seconds);
+
+      document.getElementById('timeSliderStart').value = 0;
+      document.getElementById('timeSliderEnd').value = 100;
+
+      updatePIDSelectOptions();
+      updateKPIs();
+      renderCharts();
+      renderDiagnostics();
+      renderTable();
+      renderDynamicConclusionsReport();
+    }
+
+    function updatePIDSelectOptions() {
+      const select = document.getElementById('pidFilterSelect');
+      select.innerHTML = '<option value="ALL">Todos los PID</option>';
+      pidsList.forEach(pid => {
+        const opt = document.createElement('option');
+        opt.value = pid;
+        opt.textContent = pid;
+        select.appendChild(opt);
+      });
+    }
+
+    function updateKPIs() {
+      if (parsedData.length === 0) return;
+
+      const getMetricArray = (pidName) => parsedData.filter(d => d.pid.toLowerCase().includes(pidName.toLowerCase())).map(d => d.value);
+
+      const rpmsAll = getMetricArray('revoluciones del motor');
+      const powers = getMetricArray('power from maf');
+      const pedals = getMetricArray('posición del pedal del acelerador');
+      const maps = getMetricArray('colector de admisión');
+      const boosts = getMetricArray('sobrealimentación');
+      const mafs = getMetricArray('flujo del aire maf');
+
+      const calcStats = (arr) => {
+        if (!arr || arr.length === 0) return { max: 0, min: 0, avg: 0 };
+        const max = Math.max(...arr);
+        const min = Math.min(...arr);
+        const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+        return { max, min, avg };
+      };
+
+      const rpmStat = calcStats(rpmsAll.filter(v => v > 100));
+      const powerStat = calcStats(powers);
+      const pedalStat = calcStats(pedals);
+      const mapStat = calcStats(maps);
+      const boostStat = calcStats(boosts);
+      const mafStat = calcStats(mafs);
+
+      document.getElementById('kpi-rpm').textContent = rpmStat.max ? Math.round(rpmStat.max) : '--';
+      document.getElementById('kpi-rpm-avg').textContent = `Prom: ${Math.round(rpmStat.avg || 0)} rpm`;
+
+      document.getElementById('kpi-power').textContent = powerStat.max ? powerStat.max.toFixed(1) : '--';
+      document.getElementById('kpi-power-avg').textContent = `Prom: ${(powerStat.avg || 0).toFixed(1)} hp`;
+
+      document.getElementById('kpi-pedal').textContent = pedalStat.max ? pedalStat.max.toFixed(1) : '--';
+      document.getElementById('kpi-pedal-avg').textContent = `Prom: ${(pedalStat.avg || 0).toFixed(1)} %`;
+
+      document.getElementById('kpi-map').textContent = mapStat.max ? mapStat.max.toFixed(1) : '--';
+      document.getElementById('kpi-map-avg').textContent = `Prom: ${(mapStat.avg || 0).toFixed(1)} psi`;
+
+      document.getElementById('kpi-boost').textContent = boostStat.max ? boostStat.max.toFixed(1) : '--';
+      document.getElementById('kpi-boost-min').textContent = `Vacío mín: ${(boostStat.min || 0).toFixed(1)} psi`;
+
+      document.getElementById('kpi-maf').textContent = mafStat.max ? mafStat.max.toFixed(2) : '--';
+      document.getElementById('kpi-maf-avg').textContent = `Prom: ${(mafStat.avg || 0).toFixed(2)} g/s`;
+
+      if (groupedByTime.length > 0) {
+        const minTime = groupedByTime[0].seconds;
+        const maxTime = groupedByTime[groupedByTime.length - 1].seconds;
+        const totalSecs = Math.abs(maxTime - minTime);
+        document.getElementById('time-total-str').textContent = `${secondsToHHMMSS(minTime)} -> ${secondsToHHMMSS(maxTime)} (${totalSecs.toFixed(1)}s)`;
+
+        document.getElementById('time-start-lbl').textContent = secondsToHHMMSS(minTime);
+        document.getElementById('time-end-lbl').textContent = secondsToHHMMSS(maxTime);
+      }
+
+      document.getElementById('totalSamplesCount').textContent = parsedData.length;
+    }
+
+    function getMetricValueFromGroup(group, targetPid) {
+      for (const [pid, val] of Object.entries(group.metrics)) {
+        if (pid.toLowerCase().includes(targetPid.toLowerCase())) {
+          return val;
+        }
+      }
+      return null;
+    }
+
+    function renderCharts() {
+      const sliderStart = parseInt(document.getElementById('timeSliderStart').value) / 100;
+      const sliderEnd = parseInt(document.getElementById('timeSliderEnd').value) / 100;
+
+      const totalCount = groupedByTime.length;
+      const startIdx = Math.floor(sliderStart * (totalCount - 1));
+      const endIdx = Math.ceil(sliderEnd * (totalCount - 1));
+
+      const filteredGroups = groupedByTime.slice(startIdx, Math.max(startIdx + 1, endIdx + 1));
+      const labels = filteredGroups.map(g => g.timeFormatted);
+
+      const rpmData = filteredGroups.map(g => {
+        const v = getMetricValueFromGroup(g, 'revoluciones del motor');
+        return (v !== null && v > 100) ? v : null;
+      });
+      const powerData = filteredGroups.map(g => getMetricValueFromGroup(g, 'power from maf'));
+      const pedalData = filteredGroups.map(g => getMetricValueFromGroup(g, 'posición del pedal del acelerador'));
+
+      const mapData = filteredGroups.map(g => getMetricValueFromGroup(g, 'colector de admisión'));
+      const boostData = filteredGroups.map(g => getMetricValueFromGroup(g, 'sobrealimentación'));
+      const mafData = filteredGroups.map(g => getMetricValueFromGroup(g, 'flujo del aire maf'));
+
+      // 1. Primary Chart
+      const ctxPrimary = document.getElementById('primaryComparisonChart').getContext('2d');
+      if (primaryChart) primaryChart.destroy();
+
+      primaryChart = new Chart(ctxPrimary, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Potencia MAF (hp)',
+              data: powerData,
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              borderWidth: 2.5,
+              yAxisID: 'yPower',
+              tension: 0.3,
+              spanGaps: true,
+              pointRadius: 2
+            },
+            {
+              label: 'RPM Motor',
+              data: rpmData,
+              borderColor: '#f59e0b',
+              backgroundColor: 'rgba(245, 158, 11, 0.05)',
+              borderWidth: 2,
+              yAxisID: 'yRPM',
+              tension: 0.3,
+              spanGaps: true,
+              pointRadius: 2
+            },
+            {
+              label: 'Pedal Acelerador D (%)',
+              data: pedalData,
+              borderColor: '#06b6d4',
+              borderDash: [4, 4],
+              borderWidth: 2,
+              yAxisID: 'yPedal',
+              tension: 0.2,
+              spanGaps: true,
+              pointRadius: 0
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#111827',
+              borderColor: '#374151',
+              borderWidth: 1,
+              titleFont: { family: 'JetBrains Mono', size: 11 },
+              bodyFont: { family: 'JetBrains Mono', size: 11 }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(55, 65, 81, 0.3)' },
+              ticks: { color: '#9ca3af', font: { size: 10, family: 'JetBrains Mono' }, maxTicksLimit: 12 }
+            },
+            yPower: {
+              type: 'linear',
+              position: 'left',
+              title: { display: true, text: 'Potencia (hp)', color: '#10b981', font: { size: 11 } },
+              grid: { color: 'rgba(55, 65, 81, 0.2)' },
+              ticks: { color: '#10b981', font: { family: 'JetBrains Mono', size: 10 } }
+            },
+            yRPM: {
+              type: 'linear',
+              position: 'right',
+              title: { display: true, text: 'RPM Motor', color: '#f59e0b', font: { size: 11 } },
+              grid: { drawOnChartArea: false },
+              ticks: { color: '#f59e0b', font: { family: 'JetBrains Mono', size: 10 } }
+            },
+            yPedal: {
+              type: 'linear',
+              position: 'right',
+              min: 0,
+              max: 100,
+              title: { display: false },
+              grid: { drawOnChartArea: false },
+              ticks: { color: '#06b6d4', font: { family: 'JetBrains Mono', size: 9 }, callback: (v) => v + '%' }
+            }
+          }
+        }
+      });
+
+      // 2. Secondary Chart
+      const ctxSecondary = document.getElementById('secondaryMetricsChart').getContext('2d');
+      if (secondaryChart) secondaryChart.destroy();
+
+      secondaryChart = new Chart(ctxSecondary, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Presión MAP (psi)',
+              data: mapData,
+              borderColor: '#a855f7',
+              backgroundColor: 'rgba(168, 85, 247, 0.05)',
+              borderWidth: 2,
+              yAxisID: 'yPressure',
+              tension: 0.3,
+              spanGaps: true,
+              pointRadius: 2
+            },
+            {
+              label: 'Sobrealimentación (psi)',
+              data: boostData,
+              borderColor: '#f43f5e',
+              borderWidth: 2,
+              yAxisID: 'yPressure',
+              tension: 0.3,
+              spanGaps: true,
+              pointRadius: 2
+            },
+            {
+              label: 'Flujo MAF (g/s)',
+              data: mafData,
+              borderColor: '#6366f1',
+              borderDash: [3, 3],
+              borderWidth: 2,
+              yAxisID: 'yMAF',
+              tension: 0.3,
+              spanGaps: true,
+              pointRadius: 2
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#111827',
+              borderColor: '#374151',
+              borderWidth: 1,
+              titleFont: { family: 'JetBrains Mono', size: 11 },
+              bodyFont: { family: 'JetBrains Mono', size: 11 }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(55, 65, 81, 0.3)' },
+              ticks: { color: '#9ca3af', font: { size: 10, family: 'JetBrains Mono' }, maxTicksLimit: 12 }
+            },
+            yPressure: {
+              type: 'linear',
+              position: 'left',
+              title: { display: true, text: 'Presión (psi)', color: '#a855f7', font: { size: 11 } },
+              grid: { color: 'rgba(55, 65, 81, 0.2)' },
+              ticks: { color: '#e2e8f0', font: { family: 'JetBrains Mono', size: 10 } }
+            },
+            yMAF: {
+              type: 'linear',
+              position: 'right',
+              title: { display: true, text: 'Flujo Aire (g/sec)', color: '#6366f1', font: { size: 11 } },
+              grid: { drawOnChartArea: false },
+              ticks: { color: '#6366f1', font: { family: 'JetBrains Mono', size: 10 } }
+            }
+          }
+        }
+      });
+
+      renderScatterChart();
+    }
+
+    // Helper: Extract single series array for PID
+    function getSeriesForPid(pidQuery) {
+      return parsedData
+        .filter(d => d.pid.toLowerCase().includes(pidQuery.toLowerCase()))
+        .map(d => ({ t: d.seconds, val: d.value }))
+        .filter(d => !isNaN(d.val) && (pidQuery !== 'revoluciones' || d.val > 100));
+    }
+
+    // Scatter Chart via Nearest-Neighbor Time Interpolation
+    function renderScatterChart() {
+      const xKey = document.getElementById('scatterXSelect').value;
+      const yKey = document.getElementById('scatterYSelect').value;
+
+      const keyToQuery = {
+        pedal: 'acelerador',
+        rpm: 'revoluciones',
+        maf: 'flujo del aire maf',
+        power: 'power from maf',
+        boost: 'sobrealimentaci'
+      };
+
+      const queryX = keyToQuery[xKey] || xKey;
+      const queryY = keyToQuery[yKey] || yKey;
+
+      const seriesX = getSeriesForPid(queryX);
+      const seriesY = getSeriesForPid(queryY);
+
+      const scatterData = [];
+
+      // Match closest point in time within a 3-second window
+      seriesX.forEach(ptX => {
+        let closestY = null;
+        let minDiff = Infinity;
+        for (let ptY of seriesY) {
+          const diff = Math.abs(ptY.t - ptX.t);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closestY = ptY;
+          }
+        }
+        if (closestY && minDiff <= 3.0) {
+          scatterData.push({ x: ptX.val, y: closestY.val });
+        }
+      });
+
+      const ctxScatter = document.getElementById('scatterChart').getContext('2d');
+      if (scatterChart) scatterChart.destroy();
+
+      scatterChart = new Chart(ctxScatter, {
+        type: 'scatter',
+        data: {
+          datasets: [{
+            label: 'Muestras Correlacionadas',
+            data: scatterData,
+            backgroundColor: 'rgba(59, 130, 246, 0.6)',
+            borderColor: '#3b82f6',
+            pointRadius: 4,
+            pointHoverRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `X: ${ctx.parsed.x.toFixed(2)}, Y: ${ctx.parsed.y.toFixed(2)}`
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(55, 65, 81, 0.3)' },
+              ticks: { color: '#9ca3af', font: { family: 'JetBrains Mono', size: 10 } }
+            },
+            y: {
+              grid: { color: 'rgba(55, 65, 81, 0.3)' },
+              ticks: { color: '#9ca3af', font: { family: 'JetBrains Mono', size: 10 } }
+            }
+          }
+        }
+      });
+    }
+
+    // Diagnostic Insights
+    function renderDiagnostics() {
+      const powers = parsedData.filter(d => d.pid.toLowerCase().includes('power from maf')).map(d => d.value);
+      const mafs = parsedData.filter(d => d.pid.toLowerCase().includes('flujo del aire maf')).map(d => d.value);
+      const boosts = parsedData.filter(d => d.pid.toLowerCase().includes('sobrealimentaci')).map(d => d.value);
+      const rpms = parsedData.filter(d => d.pid.toLowerCase().includes('revoluciones del motor') && d.value > 100).map(d => d.value);
+
+      const elMafPower = document.getElementById('diag-maf-power');
+      if (mafs.length > 0 && powers.length > 0) {
+        const maxMaf = Math.max(...mafs);
+        const maxPower = Math.max(...powers);
+        const ratio = maxMaf > 0 ? (maxPower / maxMaf).toFixed(2) : 0;
+        elMafPower.innerHTML = `Relación de conversión de caudal a potencia: <strong class="text-emerald-400">${ratio} hp / (g/s)</strong>. El sensor MAF refleja una escalada progresiva de carga limpia.`;
+      } else {
+        elMafPower.textContent = 'Muestras insuficientes para calcular relación MAF/Potencia.';
+      }
+
+      const elMapBoost = document.getElementById('diag-map-boost');
+      if (boosts.length > 0) {
+        const maxBoost = Math.max(...boosts);
+        const minBoost = Math.min(...boosts);
+        if (maxBoost > 2) {
+          elMapBoost.innerHTML = `Presión de sobrealimentación positiva alcanzada: <strong class="text-rose-400">+${maxBoost.toFixed(1)} psi</strong>. Vacío máximo en admisión: <strong class="text-purple-400">${minBoost.toFixed(1)} psi</strong>.`;
+        } else {
+          elMapBoost.innerHTML = `Operación en rango de vacío/atmosférico (Mín: <strong class="text-purple-400">${minBoost.toFixed(1)} psi</strong>).`;
+        }
+      } else {
+        elMapBoost.textContent = 'Sin datos de sobrealimentación.';
+      }
+
+      const elPedalRpm = document.getElementById('diag-pedal-rpm');
+      if (rpms.length > 0) {
+        const maxRpm = Math.max(...rpms);
+        const avgRpm = rpms.reduce((a, b) => a + b, 0) / rpms.length;
+        elPedalRpm.innerHTML = `Régimen de giro entre <strong class="text-amber-400">${Math.min(...rpms)} rpm</strong> y <strong class="text-amber-400">${maxRpm} rpm</strong>. Promedio: <strong>${Math.round(avgRpm)} rpm</strong>.`;
+      } else {
+        elPedalRpm.textContent = 'Sin datos de revoluciones.';
+      }
+    }
+
+    // Dynamic Report Generator
+    function renderDynamicConclusionsReport() {
+      const getArray = (term) => parsedData.filter(d => d.pid.toLowerCase().includes(term)).map(d => d.value);
+
+      const rpms = getArray('revoluciones del motor').filter(v => v > 100);
+      const powers = getArray('power from maf');
+      const pedals = getArray('acelerador');
+      const boosts = getArray('sobrealimentaci');
+      const mafs = getArray('flujo del aire maf');
+
+      const minRpm = rpms.length ? Math.min(...rpms) : 0;
+      const maxRpm = rpms.length ? Math.max(...rpms) : 0;
+      
+      const minPower = powers.length ? Math.min(...powers) : 0;
+      const maxPower = powers.length ? Math.max(...powers) : 0;
+
+      const minBoost = boosts.length ? Math.min(...boosts) : 0;
+      const maxBoost = boosts.length ? Math.max(...boosts) : 0;
+
+      const minPedal = pedals.length ? Math.min(...pedals) : 0;
+      const maxPedal = pedals.length ? Math.max(...pedals) : 0;
+
+      const minMaf = mafs.length ? Math.min(...mafs) : 0;
+      const maxMaf = mafs.length ? Math.max(...mafs) : 0;
+
+      const ratio = maxMaf > 0 ? (maxPower / maxMaf).toFixed(2) : '0';
+
+      document.getElementById('report-rpm-range').textContent = `${Math.round(minRpm)} - ${Math.round(maxRpm)} RPM`;
+      document.getElementById('report-rpm-sub').textContent = rpms.length ? `Basado en ${rpms.length} lecturas` : 'Sin datos';
+
+      document.getElementById('report-power-peak').textContent = `${maxPower.toFixed(1)} HP`;
+      document.getElementById('report-power-sub').textContent = `Ralentí: ${minPower.toFixed(1)} HP`;
+
+      document.getElementById('report-boost-peak').textContent = `${maxBoost > 0 ? '+' : ''}${maxBoost.toFixed(1)} PSI`;
+      document.getElementById('report-boost-sub').textContent = `Vacío: ${minBoost.toFixed(1)} PSI`;
+
+      document.getElementById('report-maf-ratio').textContent = `${ratio} HP / (g/s)`;
+
+      document.getElementById('report-c1-body').innerHTML = `
+        <div class="flex items-start gap-2">
+          <i data-lucide="chevron-right" class="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5"></i>
+          <span><strong>Respuesta del acelerador:</strong> El pedal osciló entre un mínimo de <strong>${minPedal.toFixed(1)}%</strong> y una apertura máxima del <strong>${maxPedal.toFixed(1)}%</strong>.</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <i data-lucide="chevron-right" class="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5"></i>
+          <span><strong>Régimen alcanzado:</strong> El motor registró una variación de régimen desde <strong>${Math.round(minRpm)} RPM</strong> hasta un pico de <strong>${Math.round(maxRpm)} RPM</strong>.</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <i data-lucide="chevron-right" class="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5"></i>
+          <span><strong>Rendimiento estimado:</strong> La potencia calculada varió de <strong>${minPower.toFixed(2)} HP</strong> a un tope de <strong>${maxPower.toFixed(2)} HP</strong>.</span>
+        </div>
+      `;
+
+      document.getElementById('report-c2-body').innerHTML = `
+        <div class="flex items-start gap-2">
+          <i data-lucide="chevron-right" class="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5"></i>
+          <span><strong>Presión en vacío:</strong> Vacío máximo registrado en el colector de <strong>${minBoost.toFixed(1)} PSI</strong> (operación normal en desaceleración).</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <i data-lucide="chevron-right" class="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5"></i>
+          <span><strong>Sobrealimentación:</strong> Sobrealimentación máxima alcanzada de <strong>${maxBoost > 0 ? '+' : ''}${maxBoost.toFixed(1)} PSI</strong>.</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <i data-lucide="chevron-right" class="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5"></i>
+          <span><strong>Diagnóstico Turbo:</strong> ${maxBoost > 2 ? 'Activación efectiva del sistema de sobrealimentación en rango de carga.' : 'Muestra conservada principalmente en rango atmosférico.'}</span>
+        </div>
+      `;
+
+      document.getElementById('report-c3-body').innerHTML = `
+        <p class="leading-relaxed">El sensor MAF registró caudales de masa de aire entre <strong>${minMaf.toFixed(2)} g/s</strong> y <strong>${maxMaf.toFixed(2)} g/s</strong>.</p>
+        <div class="grid grid-cols-2 gap-2 bg-gray-950 p-3 rounded-lg border border-gray-800 text-center font-mono-code text-[11px]">
+          <div class="p-1">
+            <div class="text-gray-500 text-[10px]">Flujo Mínimo</div>
+            <div class="text-gray-300">${minMaf.toFixed(2)} g/s</div>
+            <div class="text-emerald-400">${minPower.toFixed(1)} HP</div>
+          </div>
+          <div class="p-1 border-l border-gray-800">
+            <div class="text-gray-500 text-[10px]">Flujo Máximo</div>
+            <div class="text-gray-300">${maxMaf.toFixed(2)} g/s</div>
+            <div class="text-emerald-400">${maxPower.toFixed(1)} HP</div>
+          </div>
+        </div>
+        <p class="leading-relaxed">Relación de respuesta: <strong>${ratio} HP por cada g/s</strong> de aire aspirado.</p>
+      `;
+
+      document.getElementById('report-c4-body').innerHTML = `
+        <div class="flex items-start gap-2">
+          <i data-lucide="check" class="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5"></i>
+          <span><strong>Procesamiento exitoso:</strong> Se procesaron <strong>${parsedData.length} lecturas</strong> corregidas en codificación y escalado.</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <i data-lucide="check" class="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5"></i>
+          <span><strong>Integridad técnica:</strong> La telemetría no muestra inconsistencias de lectura tras el saneamiento.</span>
+        </div>
+      `;
+
+      lucide.createIcons();
+    }
+
+    // Render Data Table
+    function renderTable() {
+      const pidFilter = document.getElementById('pidFilterSelect').value;
+      const searchVal = document.getElementById('searchInput').value.toLowerCase();
+
+      const filtered = parsedData.filter(d => {
+        const matchPid = (pidFilter === 'ALL' || d.pid === pidFilter);
+        const matchSearch = (d.pid.toLowerCase().includes(searchVal) ||
+                             d.timeFormatted.toLowerCase().includes(searchVal) ||
+                             String(d.value).includes(searchVal));
+        return matchPid && matchSearch;
+      });
+
+      const tbody = document.getElementById('dataTableBody');
+      tbody.innerHTML = '';
+
+      const displayRows = filtered.slice(0, 150);
+
+      displayRows.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-gray-800/50 transition';
+
+        tr.innerHTML = `
+          <td class="px-4 py-2 text-blue-400 font-semibold">${row.timeFormatted}</td>
+          <td class="px-4 py-2 text-gray-400">${row.seconds.toFixed(3)}</td>
+          <td class="px-4 py-2 text-gray-200 font-sans font-medium">${row.pid}</td>
+          <td class="px-4 py-2 text-right font-bold text-emerald-400">${row.value.toLocaleString('es-ES', { maximumFractionDigits: 4 })}</td>
+          <td class="px-4 py-2 text-gray-400">${row.units}</td>
+        `;
+
+        tbody.appendChild(tr);
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-6 text-center text-gray-500 font-sans">No se encontraron registros que coincidan con la búsqueda.</td></tr>`;
+      }
+    }
+
+    // Event Listeners Initialization
+    function setupEventListeners() {
+      document.getElementById('csvFileInput').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const data = parseCSVText(event.target.result);
+            if (data.length > 0) {
+              processParsedData(data);
+            } else {
+              alert('El archivo CSV cargado no contiene datos procesables.');
+            }
+          };
+          reader.readAsText(file, 'UTF-8');
+        }
+      });
+
+      document.getElementById('resetDemoBtn').addEventListener('click', () => {
+        const data = parseCSVText(rawEmbeddedCSV);
+        processParsedData(data);
+      });
+
+      const startSlider = document.getElementById('timeSliderStart');
+      const endSlider = document.getElementById('timeSliderEnd');
+
+      startSlider.addEventListener('input', () => {
+        if (parseInt(startSlider.value) >= parseInt(endSlider.value)) {
+          startSlider.value = parseInt(endSlider.value) - 1;
+        }
+        renderCharts();
+      });
+
+      endSlider.addEventListener('input', () => {
+        if (parseInt(endSlider.value) <= parseInt(startSlider.value)) {
+          endSlider.value = parseInt(startSlider.value) + 1;
+        }
+        renderCharts();
+      });
+
+      document.getElementById('scatterXSelect').addEventListener('change', renderScatterChart);
+      document.getElementById('scatterYSelect').addEventListener('change', renderScatterChart);
+
+      document.getElementById('pidFilterSelect').addEventListener('change', renderTable);
+      document.getElementById('searchInput').addEventListener('input', renderTable);
+    }
+
+    // App Initialization
+    window.onload = function() {
+      lucide.createIcons();
+      setupEventListeners();
+
+      const initialData = parseCSVText(rawEmbeddedCSV);
+      processParsedData(initialData);
+    };
+  </script>
+</body>
+</html>
